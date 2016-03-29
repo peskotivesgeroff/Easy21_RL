@@ -16,10 +16,10 @@ class EasyDealer():
             new_card = self.deck.deal()
             if new_card.suite == 'red':
                 self.sum -= new_card.rank
-                print('dealer got a red %i' % new_card.rank)
+                #print('dealer got a red %i' % new_card.rank)
             else:
                 self.sum += new_card.rank
-                print('dealer got a black %i' % new_card.rank)
+                #print('dealer got a black %i' % new_card.rank)
 
             if self.sum >= 17 or self.sum < 1:
                 return self.sum
