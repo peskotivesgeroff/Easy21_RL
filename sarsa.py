@@ -14,8 +14,8 @@ def choose_action_e_greedy(dealer_showing, current_sum, epsilon, Q):
         action_idx = np.argmax(Q, axis=2)[dealer_showing, current_sum]
     return action_idx
 
-
 def main():
+    lmbda = 0.1
     dealer = EasyDealer()
     # the 1st dimension corresponds to dealer's showing card
     # the 2nd dimension corresponds to player's sum
@@ -23,52 +23,56 @@ def main():
     Q = np.zeros((10, 21, 2)) # Action-Value function
     N = np.zeros((10, 21, 2)) # N(s,a): number of times that action 'a' has been selected from state 's'
     N_s = np.zeros((10, 21)) # N(s): number of times that state 's' has been visited
-
     N_0 = 100
     switcher = {
         0: 'hit',
         1: 'stick'
     }
-    for episode in range(10000000):
+
+    for episode in range(2000000):
         sys.stdout.write('\r%i'%(episode+1))
-        # start episode
-        dealer_showing = dealer.start_game() - 1 # this sum had been subtracted by one
+        # Initialize E
+        E = np.zeros((10, 21, 2)) # Eligibility Traces
+        # Start episode
+        dealer_showing = dealer.start_game() - 1
         current_sum = dealer.deal_black().rank - 1
 
-        # sample an episode sequence
-        state_sequence = []
-        action_sequence = []
-        reward = 0
-        while True:
-            state_idx = 21 * dealer_showing + current_sum
-            N_s[dealer_showing, current_sum] += 1
-            #epsilon_t = N_0/(N_0 + np.sum(N, axis=2)[dealer_showing, current_sum])
-            epsilon_t = N_0/(N_0 + N_s[dealer_showing, current_sum])
-            #print(epsilon_t)
-            # epsilon is probability of random action, or else choose greedy action
-            action_idx = choose_action_e_greedy(dealer_showing, current_sum, epsilon_t, Q)
+        # choose action A using e-greedy (initialize A)
+        N_s[dealer_showing, current_sum] += 1
+        epsilon_t = N_0/(N_0 + N_s[dealer_showing, current_sum])
+        action = choose_action_e_greedy(dealer_showing, current_sum, epsilon_t, Q)
+        state = 21 * dealer_showing + current_sum
 
-            state_sequence.append(state_idx)
-            action_sequence.append(action_idx)
-            reward, new_state = step(state_idx, switcher[action_idx], dealer)
+        while True:
+            # Take action A, observe R, S'
+            reward, new_state = step(state, switcher[action], dealer)
+
+            # Choose A' from S' using policy derived from Q
+            if new_state != 210:
+                new_sum = new_state % 21
+                N_s[dealer_showing, new_sum] += 1
+                epsilon_t = N_0/(N_0 + N_s[dealer_showing, new_sum])
+                new_action = choose_action_e_greedy(dealer_showing, new_sum, epsilon_t, Q)
+                delta = reward + Q[dealer_showing, new_sum, new_action] - Q[dealer_showing, current_sum, action]
+            else:
+                delta = reward - Q[dealer_showing, current_sum, action]
+
+            E[dealer_showing, current_sum, action] += 1
+
+            N[dealer_showing, current_sum, action] += 1
+            alpha = 1/N[dealer_showing, current_sum, action]
+            Q += alpha * delta * E
+            E *= lmbda
 
             if new_state == 210:
                 break
             else:
-                current_sum = new_state % 21
-
-        # start updating
-        for state, action in zip(state_sequence, action_sequence):
-            dealer_showing = state / 21
-            current_sum = state % 21
-            N[dealer_showing, current_sum, action] += 1
-            alpha_t = 1/N[dealer_showing, current_sum, action]
-            Q[dealer_showing, current_sum ,action] += \
-                    alpha_t * (reward - Q[dealer_showing, current_sum, action])
+                state = new_state
+                action = new_action
+                current_sum = new_sum
 
     # plot Value function v
     v = np.max(Q, axis=2)
-    #v = Q[:,:,0]
     fig = plt.figure(1)
     ax = fig.gca(projection='3d')
     X = np.arange(1, 11)
